@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#1F4E78">
+<title>Μηχανικός – Πελάτες</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root{
+    --blue:#1F4E78; --blue2:#2E75B6; --bg:#f3f5f8; --card:#fff;
+    --green:#548235; --yellow:#bf8f00; --red:#c00000; --gray:#777;
+    --line:#e1e5ea;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       background:var(--bg);color:#222;font-size:15px}
+  header{background:var(--blue);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:5;
+         display:flex;align-items:center;justify-content:space-between}
+  header h1{font-size:18px;margin:0;font-weight:600}
+  header button{background:var(--blue2);color:#fff;border:none;border-radius:8px;
+                padding:8px 12px;font-size:14px;font-weight:600}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 12px;background:#fff;
+         border-bottom:1px solid var(--line)}
+  .stat{text-align:center}
+  .stat b{display:block;font-size:17px;color:var(--blue)}
+  .stat span{font-size:11px;color:var(--gray)}
+  .toolbar{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .toolbar .row{display:flex;gap:8px}
+  .toolbar input,.toolbar select{flex:1;padding:9px 10px;border:1px solid var(--line);
+        border-radius:8px;font-size:14px;background:#fff;min-width:0}
+  .toolbar .btns{display:flex;gap:8px}
+  .toolbar .btns button{flex:1;padding:9px;border:none;border-radius:8px;font-size:13px;font-weight:600}
+  .b-exp{background:var(--green);color:#fff}
+  .b-imp{background:var(--blue2);color:#fff}
+  .list{padding:0 12px 90px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+        padding:12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .card .name{font-weight:700;font-size:16px;color:var(--blue)}
+  .card .serv{font-size:12px;color:var(--gray);margin-top:2px}
+  .badge{font-size:11px;padding:3px 8px;border-radius:20px;font-weight:600;white-space:nowrap}
+  .b-se{background:#fff2cc;color:#7f6000}
+  .b-an{background:#fce4d6;color:#843c0c}
+  .b-ok{background:#e2efda;color:#375623}
+  .b-ak{background:#f2f2f2;color:#555}
+  .card .meta{margin-top:8px;font-size:13px;color:#444;line-height:1.5}
+  .card .meta div{display:flex;gap:6px}
+  .card .meta b{color:#666;min-width:74px;font-weight:600}
+  .card .money{display:flex;justify-content:space-between;margin-top:8px;
+        padding-top:8px;border-top:1px dashed var(--line);font-size:13px}
+  .card .money .rem{font-weight:700;color:var(--red)}
+  .card .actions{display:flex;gap:8px;margin-top:10px}
+  .card .actions button{flex:1;padding:8px;border-radius:8px;border:none;font-size:13px;font-weight:600}
+  .a-edit{background:#eaf1fb;color:var(--blue)}
+  .a-del{background:#fdeaea;color:var(--red)}
+  .empty{text-align:center;color:var(--gray);padding:40px 20px}
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:20;
+           align-items:flex-start;justify-content:center;overflow:auto;padding:20px}
+  #overlay.show{display:flex}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:560px;margin:auto;
+         padding:16px;max-height:92vh;overflow:auto}
+  .modal h2{margin:0 0 12px;font-size:18px;color:var(--blue)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .grid .full{grid-column:1/3}
+  .field{display:flex;flex-direction:column;gap:3px}
+  .field label{font-size:11px;color:var(--gray);font-weight:600}
+  .field input,.field select,.field textarea{
+        padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff}
+  .field textarea{resize:vertical;min-height:46px}
+  .modal .foot{display:flex;gap:10px;margin-top:14px}
+  .modal .foot button{flex:1;padding:11px;border:none;border-radius:10px;font-size:15px;font-weight:700}
+  .m-save{background:var(--blue);color:#fff}
+  .m-cancel{background:#eee;color:#444}
+  .fab{position:fixed;right:16px;bottom:18px;width:56px;height:56px;border-radius:50%;
+       background:var(--blue);color:#fff;border:none;font-size:30px;box-shadow:0 3px 10px rgba(0,0,0,.3);z-index:6}
+  @media(min-width:680px){.toolbar{flex-direction:row;flex-wrap:wrap}.toolbar .row{flex:1}}
+</style>
+</head>
+<body>
+<header>
+  <h1>📐 Μηχανικός – Πελάτες</h1>
+  <button onclick="openForm()">+ Νέος</button>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<div class="toolbar">
+  <div class="row">
+    <input id="search" placeholder="🔎 Αναζήτηση ονόματος, ΑΦΜ, τοποθεσίας…" oninput="render()">
+  </div>
+  <div class="row">
+    <select id="fService" onchange="render()"><option value="">Όλες οι υπηρεσίες</option></select>
+    <select id="fStatus" onchange="render()">
+      <option value="">Όλες οι καταστάσεις</option>
+      <option>Σε εξέλιξη</option><option>Αναμονή</option>
+      <option>Ολοκληρωμένο</option><option>Ακυρωμένο</option>
+    </select>
+  </div>
+  <div class="btns">
+    <button class="b-exp" onclick="exportCSV()">⬇ Εξαγωγή CSV</button>
+    <button class="b-imp" onclick="document.getElementById('imp').click()">⬆ Εισαγωγή CSV</button>
+    <button class="b-imp" onclick="exportJSON()">💾 Backup</button>
+    <input id="imp" type="file" accept=".csv" style="display:none" onchange="importCSV(event)">
+  </div>
+</div>
+
+<div class="list" id="list"></div>
+
+<button class="fab" onclick="openForm()">+</button>
+
+<div id="overlay">
+  <div class="modal">
+    <h2 id="formTitle">Νέος Πελάτης / Έργο</h2>
+    <div class="grid">
+      <div class="field"><label>Ημ/νία Εγγραφής</label><input id="f_date" type="date"></div>
+      <div class="field full"><label>Ονοματεπώνυμο / Επωνυμία *</label><input id="f_name"></div>
+      <div class="field"><label>ΑΦΜ</label><input id="f_afm" inputmode="numeric"></div>
+      <div class="field"><label>ΔΟΥ</label><input id="f_dou"></div>
+      <div class="field"><label>Α.Δ.Τ.</label><input id="f_adt"></div>
+      <div class="field"><label>Τηλέφωνο</label><input id="f_phone" inputmode="tel"></div>
+      <div class="field full"><label>Email</label><input id="f_email" type="email"></div>
+      <div class="field full"><label>Διεύθυνση Κατοικίας</label><input id="f_address"></div>
+      <div class="field full"><label>Τοποθεσία Ακινήτου</label><input id="f_location"></div>
+      <div class="field full"><label>Είδος Υπηρεσίας</label><select id="f_service"></select></div>
+      <div class="field full"><label>Περιγραφή Έργου</label><textarea id="f_desc"></textarea></div>
+      <div class="field"><label>Κατάσταση</label><select id="f_status">
+        <option>Σε εξέλιξη</option><option>Αναμονή</option>
+        <option>Ολοκληρωμένο</option><option>Ακυρωμένο</option></select></div>
+      <div class="field"><label>Πληρωμή</label><select id="f_payment">
+        <option>Εκκρεμεί</option><option>Μερική</option><option>Εξοφλήθη</option></select></div>
+      <div class="field"><label>Ημ/νία Ανάθεσης</label><input id="f_assign" type="date"></div>
+      <div class="field"><label>Ημ/νία Ολοκλήρωσης</label><input id="f_complete" type="date"></div>
+      <div class="field"><label>Συμφωνηθείσα Αμοιβή (€)</label><input id="f_fee" type="number" inputmode="decimal" step="0.01"></div>
+      <div class="field"><label>Εισπραχθέν (€)</label><input id="f_paid" type="number" inputmode="decimal" step="0.01"></div>
+      <div class="field full"><label>Συνεργάτες</label><input id="f_partners"></div>
+      <div class="field full"><label>Παρατηρήσεις</label><textarea id="f_notes"></textarea></div>
+    </div>
+    <div class="foot">
+      <button class="m-cancel" onclick="closeForm()">Άκυρο</button>
+      <button class="m-save" onclick="save()">Αποθήκευση</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SERVICES = ["Οικοδομική Άδεια","Άδεια Λειτουργίας","Στατική Μελέτη ΟΣ",
+  "Στατική Μελέτη Μετάλλου","Τοπογραφικό","Μελέτη Πυροπροστασίας",
+  "Ταυτότητα Κτιρίου","Αυθαίρετα (Ν.4495)","Ενεργειακό Πιστοποιητικό",
+  "Ηλεκτρομηχανολογικά","Τοπογράφηση/GNSS","Άλλο"];
+const KEY = "michanikos_clients_v1";
+let clients = [];
+try { clients = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch(e){ clients = []; }
+let editingId = null;
+
+function fillSelects(){
+  const s1 = document.getElementById("f_service");
+  const s2 = document.getElementById("fService");
+  SERVICES.forEach(s=>{
+    s1.insertAdjacentHTML("beforeend",`<option>${s}</option>`);
+    s2.insertAdjacentHTML("beforeend",`<option>${s}</option>`);
+  });
+}
+fillSelects();
+
+const STATUS_CLASS = {"Σε εξέλιξη":"b-se","Αναμονή":"b-an","Ολοκληρωμένο":"b-ok","Ακυρωμένο":"b-ak"};
+const euro = n => (parseFloat(n)||0).toLocaleString("el-GR",{minimumFractionDigits:2,maximumFractionDigits:2})+" €";
+
+function render(){
+  const q = document.getElementById("search").value.trim().toLowerCase();
+  const fs = document.getElementById("fService").value;
+  const ft = document.getElementById("fStatus").value;
+  const bus = [];
+  // rebuild from storage (in case changed)
+  try { clients = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch(e){}
+  clients.forEach(c=>{
+    if(fs && c.service!==fs) return;
+    if(ft && c.status!==ft) return;
+    if(q){
+      const hay = [c.name,c.afm,c.location,c.service,c.notes].join(" ").toLowerCase();
+      if(!hay.includes(q)) return;
+    }
+    bus.push(c);
+  });
+  const list = document.getElementById("list");
+  if(!bus.length){
+    list.innerHTML = '<div class="empty">Δεν υπάρχουν εγγραφές.<br>Πάτα το <b>+</b> για να προσθέσεις πελάτη.</div>';
+  } else {
+    list.innerHTML = bus.map(c=>{
+      const rem = (parseFloat(c.fee)||0)-(parseFloat(c.paid)||0);
+      return `<div class="card">
+        <div class="top">
+          <div><div class="name">${esc(c.name)}</div>
+          <div class="serv">${esc(c.service||"")}</div></div>
+          <span class="badge ${STATUS_CLASS[c.status]||"b-ak"}">${esc(c.status||"")}</span>
+        </div>
+        <div class="meta">
+          ${c.afm?`<div><b>ΑΦΜ</b><span>${esc(c.afm)}</span></div>`:""}
+          ${c.phone?`<div><b>Τηλ.</b><span>${esc(c.phone)}</span></div>`:""}
+          ${c.email?`<div><b>Email</b><span>${esc(c.email)}</span></div>`:""}
+          ${c.location?`<div><b>Ακίνητο</b><span>${esc(c.location)}</span></div>`:""}
+          ${c.desc?`<div><b>Έργο</b><span>${esc(c.desc)}</span></div>`:""}
+        </div>
+        <div class="money">
+          <span>Αμοιβή: <b>${euro(c.fee)}</b></span>
+          <span>Εισπρ.: <b>${euro(c.paid)}</b></span>
+          <span class="rem">Υπόλ.: ${euro(rem)}</span>
+        </div>
+        <div class="actions">
+          <button class="a-edit" onclick="openForm('${c.id}')">Επεξεργασία</button>
+          <button class="a-del" onclick="del('${c.id}')">Διαγραφή</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  renderStats();
+}
+
+function renderStats(){
+  const total = clients.length;
+  const active = clients.filter(c=>c.status==="Σε εξέλιξη").length;
+  const fee = clients.reduce((s,c)=>s+(parseFloat(c.fee)||0),0);
+  const paid = clients.reduce((s,c)=>s+(parseFloat(c.paid)||0),0);
+  const rem = fee-paid;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><b>${total}</b><span>Πελάτες</span></div>
+    <div class="stat"><b>${active}</b><span>Ενεργά</span></div>
+    <div class="stat"><b>${euro(rem)}</b><span>Υπόλοιπο</span></div>
+    <div class="stat"><b>${euro(fee)}</b><span>Αμοιβές</span></div>
+    <div class="stat"><b>${euro(paid)}</b><span>Εισπρ.</span></div>
+    <div class="stat"><b>${clients.filter(c=>c.payment==="Εκκρεμεί").length}</b><span>Ανεξόφλητα</span></div>`;
+}
+
+function esc(s){return (s||"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));}
+
+function openForm(id){
+  editingId = id||null;
+  document.getElementById("formTitle").textContent = id?"Επεξεργασία":"Νέος Πελάτης / Έργο";
+  const c = id ? clients.find(x=>x.id===id) : {};
+  const g = k => c[k]||"";
+  document.getElementById("f_date").value = g("date")||new Date().toISOString().slice(0,10);
+  ["name","afm","dou","adt","phone","email","address","location","desc","assign","complete","fee","paid","partners","notes"].forEach(k=>{
+    document.getElementById("f_"+k).value = g(k);
+  });
+  document.getElementById("f_service").value = g("service");
+  document.getElementById("f_status").value = g("status")||"Σε εξέλιξη";
+  document.getElementById("f_payment").value = g("payment")||"Εκκρεμεί";
+  document.getElementById("overlay").classList.add("show");
+}
+function closeForm(){document.getElementById("overlay").classList.remove("show");}
+
+function save(){
+  const get = k => document.getElementById("f_"+k).value.trim();
+  if(!get("name")){alert("Το Ονοματεπώνυμο / Επωνυμία είναι υποχρεωτικό.");return;}
+  const rec = {
+    id: editingId || (Date.now()+""),
+    date:get("date"), name:get("name"), afm:get("afm"), dou:get("dou"), adt:get("adt"),
+    phone:get("phone"), email:get("email"), address:get("address"), location:get("location"),
+    service:document.getElementById("f_service").value, desc:get("desc"),
+    status:document.getElementById("f_status").value,
+    assign:get("assign"), complete:get("complete"),
+    fee:get("fee")?parseFloat(get("fee")):0, paid:get("paid")?parseFloat(get("paid")):0,
+    payment:document.getElementById("f_payment").value,
+    partners:get("partners"), notes:get("notes")
+  };
+  if(editingId){const i=clients.findIndex(x=>x.id===editingId);clients[i]=rec;}
+  else clients.unshift(rec);
+  persist(); closeForm(); render();
+}
+
+function del(id){
+  if(confirm("Διαγραφή της εγγραφής;")){
+    clients = clients.filter(x=>x.id!==id); persist(); render();
+  }
+}
+function persist(){localStorage.setItem(KEY, JSON.stringify(clients));}
+
+// CSV (Excel Greek locale uses ; separator)
+function csvCell(v){v=v==null?"":String(v);return /[",\n;]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function exportCSV(){
+  const cols=[["date","Ημ/νία Εγγραφής"],["name","Ονοματεπώνυμο / Επωνυμία"],["afm","ΑΦΜ"],
+    ["dou","ΔΟΥ"],["adt","Α.Δ.Τ."],["phone","Τηλέφωνο"],["email","Email"],
+    ["address","Διεύθυνση Κατοικίας"],["location","Τοποθεσία Ακινήτου"],
+    ["service","Είδος Υπηρεσίας"],["desc","Περιγραφή Έργου"],["status","Κατάσταση"],
+    ["assign","Ημ/νία Ανάθεσης"],["complete","Ημ/νία Ολοκλήρωσης"],["fee","Συμφωνηθείσα Αμοιβή (€)"],
+    ["paid","Εισπραχθέν (€)"],["payment","Πληρωμή"],["partners","Συνεργάτες"],["notes","Παρατηρήσεις"]];
+  let rows=[cols.map(c=>c[1]).join(";")];
+  clients.forEach(c=>{rows.push(cols.map(col=>csvCell(c[col[0]])).join(";"));});
+  download(rows.join("\r\n"),"pelates.csv","text/csv;charset=utf-8");
+}
+function exportJSON(){download(JSON.stringify(clients,null,2),"pelates-backup.json","application/json");}
+function download(text,name,type){
+  const blob=new Blob(["﻿"+text],{type});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;
+  a.click();URL.revokeObjectURL(a.href);
+}
+function importCSV(e){
+  const file=e.target.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const text=ev.target.result.replace(/^﻿/,"");
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    if(!lines.length)return;
+    const head=lines[0].split(";").map(h=>h.trim());
+    const map={};
+    const legend={"Ημ/νία Εγγραφής":"date","Ονοματεπώνυμο / Επωνυμία":"name","ΑΦΜ":"afm","ΔΟΥ":"dou",
+      "Α.Δ.Τ.":"adt","Τηλέφωνο":"phone","Email":"email","Διεύθυνση Κατοικίας":"address",
+      "Τοποθεσία Ακινήτου":"location","Είδος Υπηρεσίας":"service","Περιγραφή Έργου":"desc",
+      "Κατάσταση":"status","Ημ/νία Ανάθεσης":"assign","Ημ/νία Ολοκλήρωσης":"complete",
+      "Συμφωνηθείσα Αμοιβή (€)":"fee","Εισπραχθέν (€)":"paid","Πληρωμή":"payment",
+      "Συνεργάτες":"partners","Παρατηρήσεις":"notes"};
+    head.forEach((h,i)=>{if(legend[h])map[i]=legend[h];});
+    let added=0;
+    for(let i=1;i<lines.length;i++){
+      const cells=lines[i].split(";");
+      const rec={id:Date.now()+""+i};
+      head.forEach((_,idx)=>{const f=map[idx];if(f)rec[f]=cells[idx]!==undefined?cells[idx].trim():"";});
+      if(rec.fee)rec.fee=parseFloat(String(rec.fee).replace(",","."))||0;
+      if(rec.paid)rec.paid=parseFloat(String(rec.paid).replace(",","."))||0;
+      if(rec.name){clients.unshift(rec);added++;}
+    }
+    persist();render();alert("Εισήχθησαν "+added+" εγγραφές.");
+    e.target.value="";
+  };
+  reader.readAsText(file,"utf-8");
+}
+
+document.getElementById("overlay").addEventListener("click",e=>{
+  if(e.target.id==="overlay")closeForm();
+});
+render();
+</script>
+</body>
+</html>
