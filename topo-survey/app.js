@@ -83,6 +83,20 @@ function polygonArea(coords) {
 function fmtNum(n, d = 2) {
   return Number(n).toLocaleString('el-GR', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
+// Αρχική φορά (initial bearing / αζιμούθιο) σε μοίρες 0-360 (Β=0, Α=90, Ν=180, Δ=270)
+function bearing(a, b) {
+  const toRad = d => d * Math.PI / 180, toDeg = r => r * 180 / Math.PI;
+  const la1 = toRad(a[0]), la2 = toRad(b[0]);
+  const dLon = toRad(b[1] - a[1]);
+  const y = Math.sin(dLon) * Math.cos(la2);
+  const x = Math.cos(la1) * Math.sin(la2) - Math.sin(la1) * Math.cos(la2) * Math.cos(dLon);
+  let brg = toDeg(Math.atan2(y, x));
+  return (brg + 360) % 360;
+}
+// διανυσματική απόσταση από το τρέχον GPS προς το στόχο
+function toTarget(from, target) {
+  return { dist: haversine(from, target), brg: bearing(from, target) };
+}
 
 function initMap() {
   map = L.map('map', { zoomControl: true, attributionControl: true });
@@ -135,6 +149,7 @@ function onFix(p) {
   document.getElementById('fixText').innerHTML =
     'Εδώ: ' + fmt(lat,5) + ', ' + fmt(lon,5) + (e ? '<br>ΕΓΣΑ87 X=' + e.easting.toFixed(2) + ' Y=' + e.northing.toFixed(2) : '');
   document.getElementById('fixBanner').classList.remove('hidden');
+  updateStakeout();
 }
 function onGpsErr(err) {
   let msg = 'GPS: σφάλμα';
@@ -383,13 +398,15 @@ function renderFeatures() {
     return '<div class="feat"><div class="ftitle"><span>' + esc(f.name) + '</span><span>' + kind + '</span></div>' +
       '<div class="fmeta">' + esc(f.cat) + (e0 ? '<br>X=' + e0.easting.toFixed(2) + ' Y=' + e0.northing.toFixed(2) : '') + '</div>' +
       (f.photo ? '<img class="thumb" src="' + f.photo + '">' : '') +
-      '<div class="factions"><button data-edit="' + f.id + '">Επεξεργασία</button><button data-center="' + f.id + '">Κέντρο</button></div></div>';
+      '<div class="factions"><button data-edit="' + f.id + '">Επεξεργασία</button><button data-center="' + f.id + '">Κέντρο</button>' +
+      (f.type === 'point' ? '<button data-stake="' + f.id + '">📍 Stakeout</button>' : '') + '</div></div>';
   }).join('');
   body.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => openEditor(b.dataset.edit));
   body.querySelectorAll('[data-center]').forEach(b => b.onclick = () => {
     const f = features.find(x => x.id === b.dataset.center);
     if (f) map.setView(f.coords[0], Math.max(map.getZoom(), 18));
   });
+  body.querySelectorAll('[data-stake]').forEach(b => b.onclick = () => startStakeout(b.dataset.stake));
 }
 
 // ---------- Εξαγωγές ----------
@@ -450,6 +467,172 @@ function exportGeoJSON() {
   toast('Εξαγωγή GeoJSON');
 }
 
+// ---------- Stakeout ----------
+let stake = null; // { id, name, target:[lat,lon], marker, line }
+function startStakeout(id) {
+  const f = features.find(x => x.id === id);
+  if (!f || f.type !== 'point') { toast('Το stakeout είναι για σημεία'); return; }
+  const target = f.coords[0];
+  if (stake && stake.marker) map.removeLayer(stake.marker);
+  if (stake && stake.line) map.removeLayer(stake.line);
+  stake = { id, name: f.name, target, marker: null, line: null };
+  document.getElementById('panel').classList.add('hidden');
+  document.getElementById('stkTitle').textContent = 'Stakeout: ' + f.name;
+  document.getElementById('stakeout').classList.remove('hidden');
+  if (gpsFix) updateStakeout(); else toast('Ενεργοποίησε το GPS για stakeout');
+}
+function stopStakeout() {
+  if (stake && stake.marker) map.removeLayer(stake.marker);
+  if (stake && stake.line) map.removeLayer(stake.line);
+  stake = null;
+  document.getElementById('stakeout').classList.add('hidden');
+}
+function updateStakeout() {
+  if (!stake || !gpsFix) return;
+  const from = [gpsFix.lat, gpsFix.lon];
+  const t = toTarget(from, stake.target);
+  const arrow = document.getElementById('stkArrow');
+  arrow.style.transform = 'rotate(' + t.brg + 'deg)';
+  const d = t.dist;
+  const distTxt = d >= 1000 ? fmtNum(d / 1000) + ' km' : fmtNum(d) + ' m';
+  document.getElementById('stkInfo').innerHTML =
+    'Απόσταση: <b>' + distTxt + '</b><br>Αζιμούθιο: <b>' + fmtNum(t.brg, 1) + '°</b>' +
+    (gpsFix.acc ? '<br>Ακρίβεια GPS: ±' + gpsFix.acc.toFixed(0) + ' m' : '');
+  // ενημέρωση χάρτη: γραμμή από GPS -> στόχο
+  if (stake.line) map.removeLayer(stake.line);
+  stake.line = L.polyline([from, stake.target], { color: '#e65100', weight: 2, dashArray: '4 6' }).addTo(map);
+  if (!stake.marker) {
+    stake.marker = L.circleMarker(stake.target, { radius: 9, color: '#fff', fillColor: '#e65100', fillOpacity: 1, weight: 3 }).addTo(map)
+      .bindTooltip('Στόχος: ' + stake.name, { permanent: true });
+  }
+}
+
+// ---------- Εισαγωγή KML (για σύγκριση) ----------
+let kmlLayer = null;
+function importKML(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const txt = r.result;
+      const xml = new DOMParser().parseFromString(txt, 'text/xml');
+      if (xml.querySelector('parsererror')) throw new Error('Μη έγκυρο KML');
+      const pts = [], lines = [], polys = [];
+      // Placemarks με Point
+      xml.querySelectorAll('Point').forEach(p => {
+        const c = p.querySelector('coordinates');
+        if (c) { const [lon, lat] = c.textContent.trim().split(',').map(Number); if (!isNaN(lat)) pts.push([lat, lon]); }
+      });
+      // LineStrings / Polygons (παίρνουμε τις συντεταγμένες)
+      const grab = (sel, bucket, closed) => {
+        xml.querySelectorAll(sel).forEach(el => {
+          const c = el.querySelector('coordinates');
+          if (!c) return;
+          const arr = c.textContent.trim().split(/\s+/).map(s => s.split(',').map(Number)).filter(a => a.length >= 2 && !isNaN(a[0]) && !isNaN(a[1])).map(a => [a[1], a[0]]);
+          if (arr.length) bucket.push(arr);
+        });
+      };
+      grab('LineString', lines, false);
+      grab('LinearRing', polys, true);
+      if (kmlLayer) map.removeLayer(kmlLayer);
+      kmlLayer = L.layerGroup().addTo(map);
+      pts.forEach(p => L.circleMarker(p, { radius: 5, color: '#fff', fillColor: '#9c27b0', fillOpacity: 1, weight: 2 }).addTo(kmlLayer));
+      lines.forEach(l => L.polyline(l, { color: '#9c27b0', weight: 3, dashArray: '5 5' }).addTo(kmlLayer));
+      polys.forEach(p => L.polygon(p, { color: '#9c27b0', weight: 3, fillColor: '#9c27b0', fillOpacity: 0.12, dashArray: '5 5' }).addTo(kmlLayer));
+      const n = pts.length + lines.length + polys.length;
+      if (n) {
+        map.fitBounds(kmlLayer.getBounds());
+        toast('Εισήχθησαν ' + n + ' στοιχεία KML (μωβ)');
+      } else toast('Δεν βρέθηκαν συντεταγμένες στο KML');
+    } catch (e) { toast('Σφάλμα KML: ' + e.message); }
+  };
+  r.readAsText(file);
+}
+
+// ---------- Εξωτερικός GNSS μέσω Bluetooth (Web Bluetooth) ----------
+let btDev = null, btChar = null, btBuf = '', btFix = null;
+function setBtStatus(txt) {
+  const btn = document.getElementById('btnBt');
+  btn.textContent = '🔵 ' + txt;
+}
+async function connectGNSS() {
+  if (!('bluetooth' in navigator)) { toast('Το Bluetooth δεν υποστηρίζεται (χρειάζεται HTTPS + Chrome)'); return; }
+  try {
+    setBtStatus('Αναζήτηση…');
+    const device = await navigator.bluetooth.requestDevice({
+      // Φίλτρο για συσκευές που δημοσιεύουν NUS (Emlid/πολλοί GNSS) ή γενικό
+      optionalServices: ['6e400001-b5a3-f393-e0a9-e50e24dcca9e', '0000180a-0000-1000-8000-00805f9b34fb']
+    });
+    btDev = device;
+    setBtStatus('Σύνδεση… ' + (device.name || ''));
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService('6e400001-b5a3-f393-e0a9-e50e24dcca9e');
+    btChar = await service.getCharacteristic('6e400003-b5a3-f393-e0a9-e50e24dcca9e'); // RX (NMEA out)
+    await btChar.startNotifications();
+    btChar.addEventListener('characteristicvaluechanged', onBtData);
+    device.addEventListener('gattserverdisconnected', () => { setBtStatus('Αποσυνδέθηκε'); btDev = null; btChar = null; });
+    setBtStatus('Συνδεδεμένο: ' + (device.name || 'GNSS'));
+    toast('GNSS συνδέθηκε. Περιμένω NMEA…');
+  } catch (e) {
+    setBtStatus('Σύνδεση GNSS (Bluetooth)');
+    toast('Bluetooth: ' + (e.message || e));
+  }
+}
+function onBtData(ev) {
+  const v = new Uint8Array(ev.target.value.buffer);
+  btBuf += String.fromCharCode.apply(null, v);
+  let idx;
+  while ((idx = btBuf.indexOf('\n')) >= 0) {
+    const line = btBuf.slice(0, idx).trim();
+    btBuf = btBuf.slice(idx + 1);
+    if (line.startsWith('$')) parseNMEA(line);
+  }
+}
+function parseNMEA(line) {
+  // RMC δίνει θέση + ταχύτητα, GGA δίνει θέση + ακρίβεια
+  const parts = line.split(',');
+  if (parts[0] === '$GNRMC' || parts[0] === '$GPRMC') {
+    if (parts[2] !== 'A') return; // V = void
+    const lat = nmeaToDec(parts[3], parts[4]), lon = nmeaToDec(parts[5], parts[6]);
+    if (isNaN(lat) || isNaN(lon)) return;
+    btFix = { lat, lon, acc: gpsFix ? gpsFix.acc : 5, ts: Date.now(), src: 'bt' };
+    applyExternalFix(btFix);
+  } else if (parts[0] === '$GNGGA' || parts[0] === '$GPGGA') {
+    const lat = nmeaToDec(parts[2], parts[3]), lon = nmeaToDec(parts[4], parts[5]);
+    if (isNaN(lat) || isNaN(lon)) return;
+    const hdop = parseFloat(parts[8]); const sats = parseInt(parts[7], 10);
+    const acc = (!isNaN(hdop) && hdop > 0) ? hdop * 5 : (gpsFix ? gpsFix.acc : 5); // χονδρική εκτίμηση ακρίβειας
+    btFix = { lat, lon, acc, sats, ts: Date.now(), src: 'bt' };
+    applyExternalFix(btFix);
+  }
+}
+function nmeaToDec(val, hem) {
+  if (!val || !hem) return NaN;
+  const deg = Math.floor(parseFloat(val) / 100);
+  const min = parseFloat(val) - deg * 100;
+  let d = deg + min / 60;
+  if (hem === 'S' || hem === 'W') d = -d;
+  return d;
+}
+function applyExternalFix(f) {
+  // χρησιμοποιούμε το BT fix σαν το GPS fix (προτεραιότητα εξωτερικού δέκτη)
+  gpsFix = f;
+  setGpsStatus('fix', (f.src === 'bt' ? 'GNSS(BT) ±' : 'GPS ±') + (f.acc ? f.acc.toFixed(0) : '?') + 'm' + (f.sats ? ' ' + f.sats + 'δ' : ''));
+  if (!gpsMarker) {
+    gpsMarker = L.circleMarker([f.lat, f.lon], { radius: 7, color: '#1565c0', fillColor: '#42a5f5', fillOpacity: 1, weight: 3 }).addTo(map);
+    gpsCircle = L.circle([f.lat, f.lon], { radius: f.acc || 5, color: '#1565c0', fillColor: '#1565c0', fillOpacity: 0.08, weight: 1 }).addTo(map);
+    map.setView([f.lat, f.lon], Math.max(map.getZoom(), 18));
+  } else {
+    gpsMarker.setLatLng([f.lat, f.lon]);
+    gpsCircle.setLatLng([f.lat, f.lon]).setRadius(f.acc || 5);
+  }
+  const e = wgs84ToEgsa87(f.lat, f.lon);
+  document.getElementById('fixText').innerHTML =
+    (f.src === 'bt' ? 'GNSS(BT): ' : 'Εδώ: ') + fmt(f.lat, 6) + ', ' + fmt(f.lon, 6) +
+    (e ? '<br>ΕΓΣΑ87 X=' + e.easting.toFixed(2) + ' Y=' + e.northing.toFixed(2) : '');
+  document.getElementById('fixBanner').classList.remove('hidden');
+  updateStakeout();
+}
+
 // ---------- Toast ----------
 let toastTimer;
 function toast(msg) {
@@ -492,6 +675,12 @@ function wire() {
     }
   };
   document.getElementById('menuBtn').onclick = () => document.getElementById('sheet').classList.remove('hidden');
+  document.getElementById('impKml').onclick = () => { document.getElementById('sheet').classList.add('hidden'); document.getElementById('kmlInput').click(); };
+  document.getElementById('kmlInput').onchange = e => { if (e.target.files[0]) importKML(e.target.files[0]); e.target.value = ''; };
+  document.getElementById('btnBt').onclick = connectGNSS;
+  document.getElementById('stkClose').onclick = stopStakeout;
+  document.getElementById('stkDone').onclick = stopStakeout;
+  document.getElementById('stkCenter').onclick = () => { if (stake) map.setView(stake.target, Math.max(map.getZoom(), 19)); };
 }
 
 // ---------- Εκκίνηση ----------

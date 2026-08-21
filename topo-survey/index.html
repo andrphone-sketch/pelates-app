@@ -59,6 +59,19 @@
     <button id="measureCancel" class="act">✖ Ακύρωση</button>
   </div>
 
+  <!-- Stakeout panel (visible while staking out a point) -->
+  <div id="stakeout" class="hidden">
+    <div class="stk-card">
+      <div class="stk-head"><span id="stkTitle">Stakeout</span><button id="stkClose" type="button">✖</button></div>
+      <div id="stkArrow" class="stk-arrow">➤</div>
+      <div id="stkInfo" class="stk-info"></div>
+      <div class="stk-foot">
+        <button id="stkCenter" class="act">🎯 Κέντρο στόχου</button>
+        <button id="stkDone" class="act primary">Ολοκλήρωση</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Side panel (features list / export) -->
   <aside id="panel" class="hidden">
     <div class="panel-head">
@@ -67,6 +80,9 @@
     </div>
     <div id="panelBody"></div>
   </aside>
+
+  <!-- Import KML (hidden file input) -->
+  <input id="kmlInput" type="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml" style="display:none">
 
   <!-- Attribute editor modal -->
   <div id="modal" class="hidden">
@@ -117,6 +133,8 @@
       <button id="expKml" class="sheet-btn">⬇ KML (Google Earth)</button>
       <button id="expGeojson" class="sheet-btn">⬇ GeoJSON</button>
       <hr>
+      <button id="impKml" class="sheet-btn">⬆ Εισαγωγή KML (σύγκριση)</button>
+      <button id="btnBt" class="sheet-btn">🔵 Σύνδεση GNSS (Bluetooth)</button>
       <button id="clearAll" class="sheet-btn danger">🗑 Αδειασμα όλων</button>
       <button id="sheetClose" class="sheet-btn">Κλείσιμο</button>
     </div>

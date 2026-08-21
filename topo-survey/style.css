@@ -80,6 +80,19 @@ html, body { margin: 0; height: 100%; font-family: system-ui, "Segoe UI", Roboto
 .feat .factions button { border: 1px solid #ddd; background: #fff; border-radius: 6px; padding: 4px 8px; font-size: 11px; cursor: pointer; }
 .feat img.thumb { width: 100%; max-height: 90px; object-fit: cover; border-radius: 6px; margin-top: 6px; }
 
+/* Stakeout */
+#stakeout {
+  position: absolute; inset: 0; z-index: 1180; background: rgba(0,0,0,.35);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.stk-card { background: #fff; border-radius: 16px; padding: 18px; width: 100%; max-width: 340px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,.3); }
+.stk-head { display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+.stk-head button { border: 0; background: none; font-size: 20px; cursor: pointer; }
+.stk-arrow { font-size: 72px; line-height: 1; color: #e65100; margin: 8px 0; transition: transform .3s ease; display: inline-block; }
+.stk-info { font-size: 16px; line-height: 1.7; margin-bottom: 14px; }
+.stk-foot { display: flex; gap: 8px; }
+.stk-foot .act { flex: 1; }
+
 /* Modal */
 #modal {
   position: absolute; inset: 0; z-index: 1200; background: rgba(0,0,0,.45);
