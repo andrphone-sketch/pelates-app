@@ -36,6 +36,7 @@
     <button class="tool" data-mode="point" title="Προσθήκη σημείου">📍<span>Σημείο</span></button>
     <button class="tool" data-mode="line" title="Σχεδίαση γραμμής">〰️<span>Γραμμή</span></button>
     <button class="tool" data-mode="polygon" title="Σχεδίαση πολυγώνου">⬠<span>Πολύγ.</span></button>
+    <button class="tool" data-mode="measure" title="Μέτρηση αποστάσεων / εμβαδού">📐<span>Μέτρηση</span></button>
     <button class="tool" data-mode="pan" title="Περιήγηση χάρτη">✋<span>Χάρτης</span></button>
     <button class="tool extra" id="gpsBtn" title="Ενεργοποίηση GPS">🛰️<span>GPS</span></button>
   </nav>
@@ -45,6 +46,17 @@
     <button id="undoVertex" class="act">↩ Αφαίρεση</button>
     <button id="finishDraw" class="act primary">✔ Τέλος</button>
     <button id="cancelDraw" class="act">✖ Ακύρωση</button>
+  </div>
+
+  <!-- Measure bar (visible while measuring) -->
+  <div id="measureBar" class="hidden">
+    <div id="measureReadout">
+      <span id="measureLen">Μήκος: 0,00 m</span>
+      <span id="measureArea">Εμβαδόν: —</span>
+    </div>
+    <button id="measureUndo" class="act">↩ Αφαίρεση</button>
+    <button id="measureSave" class="act primary">💾 Αποθήκευση</button>
+    <button id="measureCancel" class="act">✖ Ακύρωση</button>
   </div>
 
   <!-- Side panel (features list / export) -->

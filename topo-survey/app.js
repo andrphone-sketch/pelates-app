@@ -52,6 +52,38 @@ let gpsFix = null; // { lat, lon, acc, ts }
 
 function fmt(n, d = 6) { return Number(n).toFixed(d); }
 
+// ---------- Γεωμετρία (αποστάσεις / εμβαδό) ----------
+// Haversine: απόσταση σε μέτρα μεταξύ δύο [lat,lon]
+function haversine(a, b) {
+  const R = 6371008.8; // μέσος ακτίνας γης (m)
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b[0] - a[0]), dLon = toRad(b[1] - a[1]);
+  const la1 = toRad(a[0]), la2 = toRad(b[0]);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+// Συνολικό μήκος πολυγραμμής (m). Αν closed=true, προσθέτει και την πλευρά που κλείνει το σχήμα.
+function polylineLength(coords, closed = false) {
+  let s = 0;
+  const n = closed ? coords.length : coords.length - 1;
+  for (let i = 1; i <= n; i++) s += haversine(coords[i - 1], coords[i % coords.length]);
+  return s;
+}
+// Εμβαδόν πολυγώνου σε m² μέσω shoelace σε ΕΓΣΑ87 (προβολικό → ευθύγραμμο)
+function polygonArea(coords) {
+  const p = coords.map(c => { const e = wgs84ToEgsa87(c[0], c[1]); return [e.easting, e.northing]; });
+  let A = 0;
+  for (let i = 0; i < p.length; i++) {
+    const j = (i + 1) % p.length;
+    A += p[i][0] * p[j][1] - p[j][0] * p[i][1];
+  }
+  return Math.abs(A / 2);
+}
+// μορφοποίηση (ελληνικό δεκαδικό, χιλιάδες)
+function fmtNum(n, d = 2) {
+  return Number(n).toLocaleString('el-GR', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
 function initMap() {
   map = L.map('map', { zoomControl: true, attributionControl: true });
   // Ελλάδα κέντρο (Αθήνα) ως προεπιλογή — προσαρμόζεται όταν έρθει GPS
@@ -118,12 +150,13 @@ function setMode(m) {
   document.querySelectorAll('.tool[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
   const drawing = (m === 'line' || m === 'polygon');
   document.getElementById('drawBar').classList.toggle('hidden', !drawing);
-  if (!drawing) cancelDraw();
-  map.getContainer().style.cursor = (m === 'pan') ? '' : 'crosshair';
+  document.getElementById('measureBar').classList.toggle('hidden', m !== 'measure');
+  if (drawing || m === 'measure') cancelDraw();
+  map.getContainer().style.cursor = (m === 'pan' || m === 'point') ? '' : 'crosshair';
 }
 
 function addVertexAt(lat, lon) {
-  if (mode.current !== 'line' && mode.current !== 'polygon') return;
+  if (mode.current !== 'line' && mode.current !== 'polygon' && mode.current !== 'measure') return;
   mode.vertices.push([lat, lon]);
   redrawDraft();
 }
@@ -138,7 +171,19 @@ function redrawDraft() {
     L.polyline(pts, { color: '#ff9800', weight: 3, dashArray: '6 6' }).addTo(drawLayer);
   } else if (mode.current === 'polygon' && pts.length >= 2) {
     L.polygon(pts, { color: '#ff9800', weight: 3, fillColor: '#ff9800', fillOpacity: 0.15, dashArray: '6 6' }).addTo(drawLayer);
+  } else if (mode.current === 'measure') {
+    if (pts.length >= 2) L.polyline(pts, { color: '#00bfa5', weight: 3 }).addTo(drawLayer);
+    updateMeasureReadout();
   }
+}
+function updateMeasureReadout() {
+  const pts = mode.vertices;
+  const isClosed = pts.length >= 3;
+  const len = polylineLength(pts, isClosed);
+  let area = null;
+  if (isClosed) area = polygonArea(pts);
+  document.getElementById('measureLen').textContent = (isClosed ? 'Περίμετρος: ' : 'Μήκος: ') + fmtNum(len) + ' m';
+  document.getElementById('measureArea').textContent = area !== null ? 'Εμβαδόν: ' + fmtNum(area) + ' m²' : 'Εμβαδόν: — (χρειάζονται ≥3 σημεία)';
 }
 function undoVertex() { mode.vertices.pop(); redrawDraft(); }
 function cancelDraw() {
@@ -157,7 +202,41 @@ function onMapClick(e) {
     openModal('point', { coords: [[e.latlng.lat, e.latlng.lng]] });
   } else if (mode.current === 'line' || mode.current === 'polygon') {
     addVertexAt(e.latlng.lat, e.latlng.lng);
+  } else if (mode.current === 'measure') {
+    addVertexAt(e.latlng.lat, e.latlng.lng);
   }
+}
+
+// ---------- Μέτρηση: αποθήκευση ----------
+function saveMeasure() {
+  const v = mode.vertices;
+  if (v.length < 2) { toast('Χρειάζονται ≥2 σημεία'); return; }
+  const type = v.length >= 3 ? 'polygon' : 'line';
+  const isClosed = v.length >= 3;
+  const len = polylineLength(v, isClosed);
+  const area = isClosed ? polygonArea(v) : null;
+  editing = { type, coords: v.slice(), measure: { length: len, area } };
+  // ανοίγουμε το modal με προσυμπληρωμένο όνομα
+  document.getElementById('modalTitle').textContent = isClosed ? 'Μέτρηση πολυγώνου' : 'Μέτρηση γραμμής';
+  document.getElementById('fName').value = (isClosed ? 'Εμβαδόν ' : 'Μήκος ') + fmtNum(isClosed ? area : len) + ' m' + (isClosed ? '²' : '');
+  document.getElementById('fCat').value = isClosed ? 'Άλλο' : 'Δρόμος';
+  document.getElementById('fNote').value = 'Μήκος: ' + fmtNum(len) + ' m' + (area !== null ? ' | Εμβαδόν: ' + fmtNum(area) + ' m²' : '');
+  document.getElementById('fPhoto').value = '';
+  document.getElementById('photoPreview').classList.add('hidden');
+  let html = 'Μήκος: <b>' + fmtNum(len) + ' m</b>';
+  if (area !== null) html += '<br>Εμβαδόν: <b>' + fmtNum(area) + ' m²</b>';
+  html += '<br><br>Κορυφές:<br>';
+  const es = v.map(c => wgs84ToEgsa87(c[0], c[1]));
+  v.forEach((c, i) => {
+    html += '#' + (i + 1) + ' Φ=' + fmt(c[0], 6) + ' Λ=' + fmt(c[1], 6);
+    if (es[i]) html += ' | X=' + es[i].easting.toFixed(2) + ' Y=' + es[i].northing.toFixed(2);
+    html += '<br>';
+  });
+  document.getElementById('modalCoords').innerHTML = html;
+  document.getElementById('modal').dataset.photo = '';
+  document.getElementById('modal').classList.remove('hidden');
+  // κρύψε το measure bar προσωρινά
+  document.getElementById('measureBar').classList.add('hidden');
 }
 
 // ---------- Modal χαρακτηριστικών ----------
@@ -255,9 +334,14 @@ function renderAll() {
 }
 function popupHtml(f) {
   const e0 = wgs84ToEgsa87(f.coords[0][0], f.coords[0][1]);
-  return '<b>' + esc(f.name) + '</b><br>' + esc(f.cat) +
-    (e0 ? '<br>X=' + e0.easting.toFixed(2) + ' Y=' + e0.northing.toFixed(2) : '') +
+  let s = '<b>' + esc(f.name) + '</b><br>' + esc(f.cat);
+  if (f.measure) {
+    s += '<br>Μήκος: ' + fmtNum(f.measure.length) + ' m';
+    if (f.measure.area !== null && f.measure.area !== undefined) s += '<br>Εμβαδόν: ' + fmtNum(f.measure.area) + ' m²';
+  }
+  s += (e0 ? '<br>X=' + e0.easting.toFixed(2) + ' Y=' + e0.northing.toFixed(2) : '') +
     (f.note ? '<br><i>' + esc(f.note) + '</i>' : '');
+  return s;
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
@@ -385,6 +469,9 @@ function wire() {
   document.getElementById('undoVertex').onclick = undoVertex;
   document.getElementById('finishDraw').onclick = finishDraw;
   document.getElementById('cancelDraw').onclick = cancelDraw;
+  document.getElementById('measureUndo').onclick = undoVertex;
+  document.getElementById('measureSave').onclick = saveMeasure;
+  document.getElementById('measureCancel').onclick = () => setMode('pan');
   document.getElementById('modalSave').onclick = saveModal;
   document.getElementById('modalDelete').onclick = deleteFeature;
   document.getElementById('modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
