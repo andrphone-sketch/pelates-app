@@ -283,18 +283,47 @@ function closeModal() {
   editing = null;
   if (mode.current === 'line' || mode.current === 'polygon') cancelDraw();
 }
+// Αυτόματη αρίθμηση σήμανσης: για πασσάλους Π1,Π2... αλλιώς τρέχων αριθμός ανά κατηγορία
+const CAT_PREFIX = {
+  'Πασσαλος / σημείο ελέγχου': 'Π',
+  'Σύνορο οικοπέδου': 'Σ',
+  'Κτίσμα': 'Κ',
+  'Δρόμος': 'Δ',
+  'Όριο ρέματος': 'Ρ',
+  'Δέντρο / εμπόδιο': 'ΔΕ',
+  'Φρεάτιο / δίκτυο': 'Φ',
+  'Άλλο': 'ΣΤ'
+};
+function autoNumber(cat) {
+  const prefix = CAT_PREFIX[cat] || 'ΣΤ';
+  let max = 0;
+  features.forEach(f => {
+    const m = (f.tag || '').match(new RegExp('^' + prefix + '(\\d+)$'));
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  });
+  return prefix + (max + 1);
+}
 function saveModal() {
   if (!editing) return;
-  const id = 'f' + Date.now() + Math.floor(Math.random() * 1000);
+  const cat = document.getElementById('fCat').value;
+  let name = document.getElementById('fName').value.trim();
+  if (!name) name = autoNumber(cat); // αυτόματη αρίθμηση αν δεν δοθεί όνομα
+  const id = editing.id || ('f' + Date.now() + Math.floor(Math.random() * 1000));
+  // διατήρησε τον αριθμό σήμανσης αν επεξεργάζεσαι υπάρχον στοιχείο, αλλιώς το όνομα είναι ο νέος αριθμός
+  const tag = editing.id ? (editing.tag || name) : name;
   const rec = {
     id, type: editing.type, coords: editing.coords,
-    name: document.getElementById('fName').value.trim() || ('Στοιχείο ' + (features.length + 1)),
-    cat: document.getElementById('fCat').value,
+    name, tag,
+    cat,
     note: document.getElementById('fNote').value.trim(),
     photo: document.getElementById('modal').dataset.photo || '',
     ts: Date.now()
   };
-  dbPut(rec).then(() => { features.push(rec); renderFeatures(); renderAll(); closeModal(); toast('Αποθηκεύτηκε'); });
+  dbPut(rec).then(() => {
+    const i = features.findIndex(x => x.id === id);
+    if (i >= 0) features[i] = rec; else features.push(rec);
+    renderFeatures(); renderAll(); closeModal(); toast('Αποθηκεύτηκε: ' + name);
+  });
 }
 
 // φωτογραφία -> data URL
@@ -336,6 +365,8 @@ function renderAll() {
       const m = L.circleMarker(f.coords[0], { radius: 7, color: '#fff', fillColor: color, fillOpacity: 1, weight: 2 });
       m.bindPopup(popupHtml(f)); m.addTo(featLayer);
       m.on('click', () => openEditor(f.id));
+      // ετικέτα αρίθμησης πάνω από τον πασσαλο/σημείο
+      if (f.tag) L.marker(f.coords[0], { icon: L.divIcon({ className: '', html: '<div class="num-badge">' + esc(f.tag) + '</div>', iconSize: [20, 20], iconAnchor: [10, 22] }), interactive: false }).addTo(featLayer);
     } else if (f.type === 'line') {
       const p = L.polyline(f.coords, { color, weight: 4 });
       p.bindPopup(popupHtml(f)); p.addTo(featLayer);
@@ -369,6 +400,7 @@ function openEditor(id) {
   document.getElementById('fName').value = f.name;
   document.getElementById('fCat').value = f.cat;
   document.getElementById('fNote').value = f.note || '';
+  editing.tag = f.tag || f.name; // διατήρησε τον αριθμό σήμανσης
   document.getElementById('modal').dataset.photo = f.photo || '';
   if (f.photo) { document.getElementById('photoImg').src = f.photo; document.getElementById('photoPreview').classList.remove('hidden'); }
   else document.getElementById('photoPreview').classList.add('hidden');
@@ -421,13 +453,13 @@ function stamp() { return new Date().toISOString().slice(0, 19).replace(/[:T]/g,
 
 // CSV σε ΕΓΣΑ87 (ένα σημείο ανά γραμμή, με τύπο χαρακτηριστικού)
 function exportCSV() {
-  let out = 'KWS,PX,PY,Z,ONOMA,KATHGORIA,SIMEIOSI,TYPOS,SEQ,LAT,LON\n';
+  let out = 'KWS,PX,PY,Z,ONOMA,KATHGORIA,SIMEIOSI,TYPOS,SEQ,LAT,LON,SHMANSI\n';
   features.forEach(f => {
     f.coords.forEach((c, i) => {
       const e = wgs84ToEgsa87(c[0], c[1]);
       out += (e ? e.easting.toFixed(3) : '') + ',' + (e ? e.northing.toFixed(3) : '') + ',,' +
         '"' + csv(f.name) + '","' + csv(f.cat) + '","' + csv(f.note) + '",' + f.type + ',' + (i + 1) + ',' +
-        fmt(c[0], 8) + ',' + fmt(c[1], 8) + '\n';
+        fmt(c[0], 8) + ',' + fmt(c[1], 8) + ',"' + csv(f.tag || '') + '"\n';
     });
   });
   download('kroki_EGSA87_' + stamp() + '.csv', out, 'text/csv;charset=utf-8');
