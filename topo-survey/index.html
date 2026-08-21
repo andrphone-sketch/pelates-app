@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1565c0">
+<title>Κροκί Τοπογραφικού</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="vendor/../icon-192.png">
+<link rel="icon" href="vendor/../icon-192.png">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <header id="topbar">
+    <div class="tb-title">Κροκί Τοπογραφικού</div>
+    <div class="tb-gps" id="gpsStatus" title="Κατάσταση GPS">
+      <span class="dot" id="gpsDot"></span>
+      <span id="gpsText">GPS: —</span>
+    </div>
+  </header>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Current fix banner -->
+  <div id="fixBanner" class="hidden">
+    <span id="fixText"></span>
+    <button id="dropGpsBtn" class="mini">+ Σημείο εδώ</button>
+  </div>
+
+  <!-- Mode toolbar -->
+  <nav id="toolbar">
+    <button class="tool" data-mode="point" title="Προσθήκη σημείου">📍<span>Σημείο</span></button>
+    <button class="tool" data-mode="line" title="Σχεδίαση γραμμής">〰️<span>Γραμμή</span></button>
+    <button class="tool" data-mode="polygon" title="Σχεδίαση πολυγώνου">⬠<span>Πολύγ.</span></button>
+    <button class="tool" data-mode="pan" title="Περιήγηση χάρτη">✋<span>Χάρτης</span></button>
+    <button class="tool extra" id="gpsBtn" title="Ενεργοποίηση GPS">🛰️<span>GPS</span></button>
+  </nav>
+
+  <!-- Action bar (visible while drawing line/polygon) -->
+  <div id="drawBar" class="hidden">
+    <button id="undoVertex" class="act">↩ Αφαίρεση</button>
+    <button id="finishDraw" class="act primary">✔ Τέλος</button>
+    <button id="cancelDraw" class="act">✖ Ακύρωση</button>
+  </div>
+
+  <!-- Side panel (features list / export) -->
+  <aside id="panel" class="hidden">
+    <div class="panel-head">
+      <h2 id="panelTitle">Στοιχεία</h2>
+      <button id="panelClose">✖</button>
+    </div>
+    <div id="panelBody"></div>
+  </aside>
+
+  <!-- Attribute editor modal -->
+  <div id="modal" class="hidden">
+    <div class="modal-card">
+      <h3 id="modalTitle">Στοιχείο</h3>
+      <label>Κωδικός / Όνομα
+        <input id="fName" type="text" placeholder="π.χ. Π1, ΣΥΝΟΡΟ_Α" autocomplete="off">
+      </label>
+      <label>Κατηγορία
+        <select id="fCat">
+          <option value="Σύνορο οικοπέδου">Σύνορο οικοπέδου</option>
+          <option value="Κτίσμα">Κτίσμα</option>
+          <option value="Δρόμος">Δρόμος</option>
+          <option value="Όριο ρέματος">Όριο ρέματος</option>
+          <option value="Δέντρο / εμπόδιο">Δέντρο / εμπόδιο</option>
+          <option value="Πασσαλος / σημείο ελέγχου">Πασσαλος / σημείο ελέγχου</option>
+          <option value="Φρεάτιο / δίκτυο">Φρεάτιο / δίκτυο</option>
+          <option value="Άλλο" selected>Άλλο</option>
+        </select>
+      </label>
+      <label>Σημείωση
+        <textarea id="fNote" rows="2" placeholder="π.χ. γωνία, ύψος πασσάλου..."></textarea>
+      </label>
+      <label>Φωτογραφία
+        <input id="fPhoto" type="file" accept="image/*" capture="environment">
+      </label>
+      <div id="photoPreview" class="hidden"><img id="photoImg" alt="φωτογραφία"><button id="photoDel" type="button">Αφαίρεση</button></div>
+      <div id="modalCoords" class="coords"></div>
+      <div class="modal-actions">
+        <button id="modalSave" class="primary">Αποθήκευση</button>
+        <button id="modalDelete" class="danger">Διαγραφή</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating buttons -->
+  <div id="fabs">
+    <button id="listBtn" title="Λίστα στοιχείων">📋</button>
+    <button id="exportBtn" title="Εξαγωγή">⬆️</button>
+    <button id="menuBtn" title="Μενού">⋮</button>
+  </div>
+
+  <!-- Export / menu sheet -->
+  <div id="sheet" class="hidden">
+    <div class="sheet-card">
+      <h3>Εξαγωγή / Εργαλεία</h3>
+      <button id="expCsv" class="sheet-btn">⬇ CSV (ΕΓΣΑ87)</button>
+      <button id="expKml" class="sheet-btn">⬇ KML (Google Earth)</button>
+      <button id="expGeojson" class="sheet-btn">⬇ GeoJSON</button>
+      <hr>
+      <button id="clearAll" class="sheet-btn danger">🗑 Αδειασμα όλων</button>
+      <button id="sheetClose" class="sheet-btn">Κλείσιμο</button>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="hidden"></div>
+</div>
+
+<script src="vendor/proj4.js"></script>
+<script src="egas87.js"></script>
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
