@@ -1,5 +1,5 @@
 /* Service Worker — offline-first για την εφαρμογή κροκιού */
-const CACHE = 'topo-survey-v4';
+const CACHE = 'topo-survey-v5';
 const ASSETS = [
   'index.html', 'app.js', 'style.css', 'egas87.js', 'manifest.webmanifest',
   'vendor/leaflet.js', 'vendor/leaflet.css', 'vendor/proj4.js'

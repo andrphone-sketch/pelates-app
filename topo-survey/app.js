@@ -499,6 +499,67 @@ function exportGeoJSON() {
   toast('Εξαγωγή GeoJSON');
 }
 
+// ---------- Εξαγωγή DXF (AutoCAD, ΕΓΣΑ87) ----------
+// Απλό ASCII DXF R12: points (POINT), γραμμές (LINE), πολύγωνα (LWPOLYLINE, κλειστά)
+function dxfPair(code, val) { return code + '\n' + val + '\n'; }
+function exportDXF() {
+  if (!features.length) { toast('Δεν υπάρχουν στοιχεία'); return; }
+  let s = '0\nSECTION\n2\nENTITIES\n';
+  features.forEach(f => {
+    if (f.type === 'point') {
+      const e = wgs84ToEgsa87(f.coords[0][0], f.coords[0][1]);
+      if (!e) return;
+      s += '0\nPOINT\n8\n0\n' + dxfPair(10, e.easting.toFixed(3)) + dxfPair(20, e.northing.toFixed(3)) + dxfPair(30, '0');
+    } else if (f.type === 'line') {
+      const pts = f.coords.map(c => wgs84ToEgsa87(c[0], c[1])).filter(Boolean);
+      for (let i = 1; i < pts.length; i++) {
+        s += '0\nLINE\n8\n0\n' +
+          dxfPair(10, pts[i - 1].easting.toFixed(3)) + dxfPair(20, pts[i - 1].northing.toFixed(3)) + dxfPair(30, '0') +
+          dxfPair(11, pts[i].easting.toFixed(3)) + dxfPair(21, pts[i].northing.toFixed(3)) + dxfPair(31, '0');
+      }
+    } else if (f.type === 'polygon') {
+      const pts = f.coords.map(c => wgs84ToEgsa87(c[0], c[1])).filter(Boolean);
+      if (pts.length < 3) return;
+      s += '0\nLWPOLYLINE\n8\n0\n' + dxfPair(90, pts.length) + '70\n1\n'; // 70=1 -> κλειστό
+      pts.forEach(p => { s += dxfPair(10, p.easting.toFixed(3)) + dxfPair(20, p.northing.toFixed(3)); });
+    }
+  });
+  s += '0\nENDSEC\n0\nEOF\n';
+  download('kroki_EGSA87_' + stamp() + '.dxf', s, 'application/dxf');
+  toast('Εξαγωγή DXF (ΕΓΣΑ87)');
+}
+
+// ---------- Φύλλο παράδοσης (PDF μέσω εκτύπωσης) ----------
+function exportPDF() {
+  if (!features.length) { toast('Δεν υπάρχουν στοιχεία'); return; }
+  const win = window.open('', '_blank');
+  if (!win) { toast('Επέτρεψε αναδυόμενα παράθυρα'); return; }
+  const d = new Date().toLocaleString('el-GR');
+  let rows = '';
+  // ταξινόμηση με βάση τον αριθμό σήμανσης
+  const sorted = features.slice().sort((a, b) => (a.tag || '').localeCompare(b.tag || '', 'el', { numeric: true }));
+  sorted.forEach(f => {
+    const e = wgs84ToEgsa87(f.coords[0][0], f.coords[0][1]);
+    const X = e ? e.easting.toFixed(3) : '—';
+    const Y = e ? e.northing.toFixed(3) : '—';
+    rows += '<tr><td>' + esc(f.tag || f.name) + '</td><td>' + esc(f.cat) + '</td><td>' + X + '</td><td>' + Y +
+      '</td><td>' + (f.type === 'point' ? 'Σημείο' : (f.type === 'line' ? 'Γραμμή' : 'Πολύγωνο')) + '</td><td>' + esc(f.note || '') + '</td></tr>';
+  });
+  win.document.write('<!DOCTYPE html><html lang="el"><head><meta charset="utf-8"><title>Φύλλο Παράδοσης</title>' +
+    '<style>body{font-family:system-ui,sans-serif;padding:24px;color:#111} h1{font-size:20px;margin:0 0 4px}' +
+    '.meta{color:#666;font-size:12px;margin-bottom:16px} table{border-collapse:collapse;width:100%;font-size:12px}' +
+    'th,td{border:1px solid #ccc;padding:6px 8px;text-align:left} th{background:#1565c0;color:#fff} tr:nth-child(even){background:#f5f7fa}' +
+    '@media print{body{padding:0}} @page{margin:16mm}</style></head><body>' +
+    '<h1>Φύλλο Παράδοσης Τοπογραφικού</h1>' +
+    '<div class="meta">Ημ/νία: ' + d + ' &nbsp;|&nbsp; Σύστημα: ΕΓΣΑ87 &nbsp;|&nbsp; Στοιχεία: ' + features.length + '</div>' +
+    '<table><thead><tr><th>Σήμανση</th><th>Κατηγορία</th><th>X (m)</th><th>Y (m)</th><th>Τύπος</th><th>Σημείωση</th></tr></thead><tbody>' +
+    rows + '</tbody></table>' +
+    '<p style="margin-top:16px;font-size:11px;color:#888">Παραγώγηκε από την εφαρμογή «Κροκί Τοπογραφικού». Οι συντεταγμένες είναι σε ΕΓΣΑ87 (m).</p>' +
+    '<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>');
+  win.document.close();
+  toast('Άνοιξε φύλλο παράδοσης (εκτύπωση σε PDF)');
+}
+
 // ---------- Stakeout ----------
 let stake = null; // { id, name, target:[lat,lon], marker, line }
 function startStakeout(id) {
@@ -701,6 +762,8 @@ function wire() {
   document.getElementById('expCsv').onclick = exportCSV;
   document.getElementById('expKml').onclick = exportKML;
   document.getElementById('expGeojson').onclick = exportGeoJSON;
+  document.getElementById('expDxf').onclick = () => { document.getElementById('sheet').classList.add('hidden'); exportDXF(); };
+  document.getElementById('expPdf').onclick = () => { document.getElementById('sheet').classList.add('hidden'); exportPDF(); };
   document.getElementById('clearAll').onclick = () => {
     if (confirm('Να διαγραφούν ΟΛΑ τα στοιχεία;')) {
       dbClear().then(() => { features = []; renderFeatures(); renderAll(); document.getElementById('sheet').classList.add('hidden'); toast('Άδειασμα'); });
